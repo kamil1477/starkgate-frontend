@@ -1,11 +1,11 @@
 import strings from '../config/strings';
-import * as blockchain from './blockchain';
 import * as browser from './browser';
 import * as date from './date';
 import * as logger from './logger';
 import * as number from './number';
 import * as object from './object';
 import * as parser from './parser';
+import * as starknet from './starknet';
 import * as storage from './storage';
 import * as string from './string';
 import * as token from './token';
@@ -30,7 +30,7 @@ const utils = {
   parser,
   date,
   object,
-  blockchain,
+  starknet,
   logger,
   storage,
   number,

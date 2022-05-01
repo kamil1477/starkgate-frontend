@@ -83,7 +83,7 @@ export const TransfersLogProvider = ({children}) => {
       delete transfer.event;
       return {
         ...transfer,
-        l2hash: utils.blockchain.starknet.getTransactionHash(
+        l2hash: utils.starknet.getTransactionHash(
           TransactionHashPrefix.L1_HANDLER,
           from_address,
           to_address,

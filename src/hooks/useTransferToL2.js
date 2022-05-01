@@ -1,17 +1,15 @@
 import {useCallback} from 'react';
 
-import {deposit, depositEth} from '../api/bridge';
-import {allowance, approve, balanceOf, ethBalanceOf} from '../api/erc20';
 import {ActionType, stepOf, TransferError, TransferStep, TransferToL2Steps} from '../enums';
 import {starknet} from '../libs';
 import {useDepositListener} from '../providers/EventManagerProvider';
 import {useSelectedToken} from '../providers/TransferProvider';
 import {useL1Wallet, useL2Wallet} from '../providers/WalletsProvider';
 import utils from '../utils';
-import {useTokenBridgeContract, useTokenContract} from './useContract';
+import {useAllowanceCall, useIsMaxTotalBalanceExceeded} from './useContractCall';
 import {useLogger} from './useLogger';
-import {useMaxTotalBalance} from './useTokenConstant';
 import {useTransferToL2Tracking} from './useTracking';
+import {useApproveTransaction, useDepositTransaction} from './useTransaction';
 import {useTransfer} from './useTransfer';
 import {useTransferProgress} from './useTransferProgress';
 
@@ -21,56 +19,19 @@ export const useTransferToL2 = () => {
   const {account: l1Account, chainId: l1ChainId, config: l1Config} = useL1Wallet();
   const {account: l2Account} = useL2Wallet();
   const {handleProgress, handleData, handleError} = useTransfer(TransferToL2Steps);
-  const selectedToken = useSelectedToken();
-  const getTokenContract = useTokenContract();
-  const getTokenBridgeContract = useTokenBridgeContract();
-  const progressOptions = useTransferProgress();
   const {addListener, removeListener} = useDepositListener();
-  const maxTotalBalance = useMaxTotalBalance();
+  const selectedToken = useSelectedToken();
+  const progressOptions = useTransferProgress();
+  const isMaxBalanceExceeded = useIsMaxTotalBalanceExceeded();
+  const allowance = useAllowanceCall();
+  const approve = useApproveTransaction();
+  const deposit = useDepositTransaction();
 
   return useCallback(
     async amount => {
-      const {symbol, decimals, name, tokenAddress, bridgeAddress} = selectedToken;
-      const tokenContract = getTokenContract(tokenAddress);
-      const bridgeContract = getTokenBridgeContract(bridgeAddress);
+      const {symbol, name, bridgeAddress} = selectedToken;
       const isEthToken = utils.token.isEth(symbol);
       const tokenBridgeAddress = bridgeAddress[l1ChainId];
-
-      const readAllowance = () => {
-        return allowance({
-          owner: l1Account,
-          spender: tokenBridgeAddress,
-          contract: tokenContract,
-          decimals
-        });
-      };
-
-      const sendApproval = async () => {
-        return approve({
-          spender: tokenBridgeAddress,
-          value: starknet.constants.MASK_250,
-          contract: tokenContract,
-          options: {from: l1Account}
-        });
-      };
-
-      const sendDeposit = () => {
-        trackInitiated({
-          from_address: l1Account,
-          to_address: l2Account,
-          amount,
-          symbol
-        });
-        const depositHandler = isEthToken ? depositEth : deposit;
-        return depositHandler({
-          recipient: l2Account,
-          contract: bridgeContract,
-          options: {from: l1Account},
-          emitter: onTransactionHash,
-          amount,
-          decimals
-        });
-      };
 
       const onTransactionHash = (error, transactionHash) => {
         if (!error) {
@@ -98,17 +59,6 @@ export const useTransferToL2 = () => {
         }
       };
 
-      const isMaxBalanceExceeded = async () => {
-        const tokenBridgeBalance = await (isEthToken
-          ? ethBalanceOf(tokenBridgeAddress)
-          : balanceOf({
-              account: tokenBridgeAddress,
-              decimals,
-              contract: tokenContract
-            }));
-        return maxTotalBalance < tokenBridgeBalance + Number(amount);
-      };
-
       try {
         logger.log('TransferToL2 called');
         if (await isMaxBalanceExceeded()) {
@@ -122,11 +72,12 @@ export const useTransferToL2 = () => {
           handleProgress(
             progressOptions.approval(symbol, stepOf(TransferStep.APPROVE, TransferToL2Steps))
           );
-          const allow = await readAllowance();
+          const allow = await allowance(l1Account, tokenBridgeAddress);
+          logger.log('Current allow value', {allow});
           logger.log('Current allow value', {allow});
           if (allow < amount) {
             logger.log('Allow value is smaller then amount, sending approve tx...', {amount});
-            await sendApproval();
+            await approve(tokenBridgeAddress, starknet.constants.MASK_250);
           }
         }
         handleProgress(
@@ -137,7 +88,13 @@ export const useTransferToL2 = () => {
         );
         addListener(onDeposit);
         logger.log('Calling deposit');
-        await sendDeposit();
+        trackInitiated({
+          from_address: l1Account,
+          to_address: l2Account,
+          amount,
+          symbol
+        });
+        await deposit(l2Account, amount, onTransactionHash);
       } catch (ex) {
         removeListener();
         trackError(ex);
@@ -153,14 +110,15 @@ export const useTransferToL2 = () => {
       l1Account,
       l2Account,
       l1Config,
-      getTokenBridgeContract,
-      getTokenContract,
       handleData,
       handleError,
       handleProgress,
       logger,
       progressOptions,
-      maxTotalBalance
+      isMaxBalanceExceeded,
+      allowance,
+      approve,
+      deposit
     ]
   );
 };

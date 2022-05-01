@@ -1,19 +1,7 @@
-import {ChainInfo, isRejected, TransactionStatusStep} from '../../enums';
-import {getStarknet, starknet} from '../../libs';
+import {ChainInfo, isRejected, TransactionStatusStep} from '../enums';
+import {getStarknet, starknet} from '../libs';
 
-const {Contract, stark, hash, number} = starknet;
-
-export const createContract = (address, ABI) => {
-  return new Contract(ABI, address, getStarknet().provider);
-};
-
-export const callContract = async (contract, method, ...args) => {
-  try {
-    return await contract.call(method, args);
-  } catch (ex) {
-    return Promise.reject(ex);
-  }
-};
+const {stark, hash, number} = starknet;
 
 export const sendTransaction = async (contract, method, args = {}) => {
   try {

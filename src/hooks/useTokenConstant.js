@@ -2,33 +2,28 @@ import {useAsyncMemo} from 'use-async-memo';
 
 import {maxDeposit, maxTotalBalance} from '../api/bridge';
 import {useTransfer} from '../providers/TransferProvider';
-import {useTokenBridgeContract} from './useContract';
+import {useMaxDepositCall, useMaxTotalBalanceCall} from './useContractCall';
 
 const cache = {};
 
 export const useMaxDeposit = () => {
-  return useTokenConstant('maxDeposit', maxDeposit);
+  const getMaxDeposit = useMaxDepositCall();
+  return useTokenConstant('maxDeposit', getMaxDeposit);
 };
 
 export const useMaxTotalBalance = () => {
-  return useTokenConstant('maxTotalBalance', maxTotalBalance);
+  const getMaxTotalBalance = useMaxTotalBalanceCall();
+  return useTokenConstant('maxTotalBalance', getMaxTotalBalance);
 };
 
 const useTokenConstant = (methodName, methodHandler) => {
   const {symbol, isL1, selectedToken} = useTransfer();
-  const getTokenBridgeContract = useTokenBridgeContract();
-
-  const fetchTokenConstant = () => {
-    const {decimals, bridgeAddress} = selectedToken;
-    const contract = getTokenBridgeContract(bridgeAddress);
-    return methodHandler({decimals, contract});
-  };
 
   return useAsyncMemo(async () => {
     if (symbol && isL1) {
       cache[methodName] = cache[methodName] || {};
       if (!cache[methodName][symbol]) {
-        const value = await fetchTokenConstant();
+        const value = await methodHandler();
         cache[methodName][symbol] = value;
         return value;
       }
